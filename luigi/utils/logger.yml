@@ -1,0 +1,46 @@
+#This is a template file. Works better if you change the {0} for the module names.
+#In fact logger.py already does this for you.
+version: 1
+disable_existing_loggers: false
+
+formatters:
+ verbose:
+  format: "%(asctime)s %(module)s %(process)d %(thread)d %(filename)s %(funcName)s: %(levelname)s %(message)s"
+
+ simple:
+  format: "%(filename)s %(funcName)s: %(levelname)s %(message)s"
+
+handlers:
+ console:
+  class: logging.StreamHandler
+  level: DEBUG
+  formatter: simple
+  stream: ext://sys.stdout
+
+ info_file_handler:
+  class: logging.handlers.RotatingFileHandler
+  level: INFO
+  formatter: verbose
+  filename: {0}_info.log
+  maxBytes: 10485760
+  backupCount: 5
+  encoding: utf8
+
+ error_file_handler:
+  class: logging.handlers.RotatingFileHandler
+  level: ERROR
+  formatter: verbose
+  filename: {0}_errors.log
+  maxBytes: 10485760
+  backupCount: 5
+  encoding: utf8
+
+loggers:
+ {0}:
+  level: INFO
+  handlers: [console, info_file_handler, error_file_handler]
+  propagate: no
+
+root:
+ level: INFO
+ handlers: [console, info_file_handler, error_file_handler]

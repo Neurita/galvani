@@ -11,7 +11,6 @@ env/
 build/
 develop-eggs/
 dist/
-downloads/
 eggs/
 lib/
 lib64/
@@ -23,8 +22,8 @@ var/
 *.egg
 
 # PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+# Usually these files are written by a python script from a template
+# before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
 
@@ -52,3 +51,12 @@ docs/_build/
 
 # PyBuilder
 target/
+
+#Temporal files
+*~
+
+#PyCharm Project
+.idea/
+
+#reference code
+devdoc/
