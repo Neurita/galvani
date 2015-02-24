@@ -27,12 +27,12 @@ class FunctionalConnectivity(object):
     """
 
     """
-    def __init__(self, func_vol, atlas, mask=None, TR=2, roi_list=None,
+    def __init__(self, image, atlas, mask=None, TR=2, roi_list=None,
                  selection_method='eigen', similarity_measure='correlation'):
         """
         Parameters
         ----------
-        func_vol: nibabel SpatialImage or boyle.nifti.NeuroImage
+        image: nibabel SpatialImage or boyle.nifti.NeuroImage
             Time series MRI volume.
 
         atlas: nibabel SpatialImage or boyle.nifti.NeuroImage
@@ -70,7 +70,7 @@ class FunctionalConnectivity(object):
         ValueError
         If func_vol and atlas do not have the same 3D shape.
         """
-        self.func_vol           = func_vol
+        self.image              = image
         self.atlas              = atlas
         self.mask               = mask
         self.sampling_interval  = TR
@@ -88,14 +88,14 @@ class FunctionalConnectivity(object):
 
     def _self_check(self):
         try:
-            check_img_compatibility(self.func_vol, self.atlas)
+            check_img_compatibility(self.image, self.atlas)
         except:
             log.exception('Functional and atlas volumes do not have the shame spatial shape.')
             raise
 
         if self.mask is not None:
             try:
-                check_img_compatibility(self.func_vol, self.mask)
+                check_img_compatibility(self.image, self.mask)
             except:
                 log.exception('Functional and atlas volumes do not have the shame spatial shape.')
                 raise
@@ -143,16 +143,17 @@ class FunctionalConnectivity(object):
         except:
             raise
 
+        mask_vol = None
         if self.mask is not None:
             mask_vol = self.mask.get_data()
 
-        func_vol  = self.func_vol.get_data()
+        func_vol  = self.image.get_data()
         atlas_vol = self.atlas.get_data()
 
         pre_filter = kwargs.pop('pre_filter', None)
         normalize  = kwargs.pop('normalize', None)
 
-        tseries = partition_timeseries(func_vol, atlas_vol, mask_vol, zeroe=True, roi_list=self.roi_list,
+        tseries = partition_timeseries(func_vol, atlas_vol, mask_vol, zeroe=True, roi_values=self.roi_list,
                                        outdict=(not self._use_lists))
 
         if isinstance(tseries, list):
@@ -220,14 +221,12 @@ class FunctionalConnectivity(object):
             self._selected_ts = OrderedDict()
 
             for r in self.roi_list:
-                self._selected_ts[r] = ts_selector.fit_transform(self._tseries[r],
-                                                                 **kwargs)
+                self._selected_ts[r] = ts_selector.fit_transform(self._tseries[r], **kwargs)
 
         elif isinstance(self._tseries, list):
             self._selected_ts = []
             for ts in self._tseries:
-                self._selected_ts.append(ts_selector.fit_transform(ts,
-                                                                   **kwargs))
+                self._selected_ts.append(ts_selector.fit_transform(ts, **kwargs))
 
     def _calculate_similarities(self, **kwargs):
         """
