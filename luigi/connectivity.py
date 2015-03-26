@@ -13,9 +13,9 @@ import numpy                as np
 import nitime.fmri.io       as tsio
 
 from   collections          import OrderedDict
-from   boyle.nifti.read     import repr_imgs
+from   boyle.nifti.check    import check_img_compatibility, repr_imgs
 from   boyle.nifti.roi      import partition_timeseries
-from   boyle.nifti.check    import check_img_compatibility
+from   boyle.exceptions     import NiftiFilesNotCompatible
 
 from   .selection           import TimeseriesSelectorFactory
 from   .similarity_measure  import SimilarityMeasureFactory
@@ -24,52 +24,50 @@ log = logging.getLogger(__name__)
 
 
 class FunctionalConnectivity(object):
-    """
+    """ Functional connectivity computation algorithms in one class.
 
+    Parameters
+    ----------
+    image: nibabel SpatialImage or boyle.nifti.NeuroImage
+        Time series MRI volume.
+
+    atlas: nibabel SpatialImage or boyle.nifti.NeuroImage
+        3D Atlas volume with discrete ROI values
+        It will be accessed from lower to greater ROI value, that
+        will be the order in the connectivity matrix, unless you
+        set roi_list with the order of appearance you want.
+        It must be in the same space as func_vol.
+
+    mask: nibabel SpatialImage or boyle.nifti.NeuroImage
+        Binary 3D mask volume, e.g., GM mask to extract ROI timeseries only from GM.
+
+    TR: int or float
+        Repetition time of the acquisition protocol used for the fMRI from
+        where ts_set has been extracted.
+
+    roi_list: list of ROI values
+        List of the values of the ROIs to indicate the order of access to
+        the ROI data.
+
+    selection_method: string
+        Defines the timeseries selection method to be applied within each ROI.
+        Choices: 'mean', 'eigen', 'ilsia', 'cca'
+                 'filtered', 'mean_and_filtered', 'eigen_and_filtered'
+        See .timeseries.selection more information.
+
+    similarity_measure: string
+        Defines the similarity measure method to be used between selected timeseries.
+        Choices: 'crosscorrelation', 'correlation', 'coherence',
+                 'mean_coherence', 'mean_correlation', 'nicorrelation'
+        See .timeseries.similarity_measure for more information.
+
+    Raises
+    ------
+    ValueError
+    If func_vol and atlas do not have the same 3D shape.
     """
     def __init__(self, image, atlas, mask=None, TR=2, roi_list=None,
                  selection_method='eigen', similarity_measure='correlation'):
-        """
-        Parameters
-        ----------
-        image: nibabel SpatialImage or boyle.nifti.NeuroImage
-            Time series MRI volume.
-
-        atlas: nibabel SpatialImage or boyle.nifti.NeuroImage
-            3D Atlas volume with discrete ROI values
-            It will be accessed from lower to greater ROI value, that
-            will be the order in the connectivity matrix, unless you
-            set roi_list with the order of appearance you want.
-            It must be in the same space as func_vol.
-
-        mask: nibabel SpatialImage or boyle.nifti.NeuroImage
-            Binary 3D mask volume, e.g., GM mask to extract ROI timeseries only from GM.
-
-        TR: int or float
-            Repetition time of the acquisition protocol used for the fMRI from
-            where ts_set has been extracted.
-
-        roi_list: list of ROI values
-            List of the values of the ROIs to indicate the order of access to
-            the ROI data.
-
-        selection_method: string
-            Defines the timeseries selection method to be applied within each ROI.
-            Choices: 'mean', 'eigen', 'ilsia', 'cca'
-                     'filtered', 'mean_and_filtered', 'eigen_and_filtered'
-            See .timeseries.selection more information.
-
-        similarity_measure: string
-            Defines the similarity measure method to be used between selected timeseries.
-            Choices: 'crosscorrelation', 'correlation', 'coherence',
-                     'mean_coherence', 'mean_correlation', 'nicorrelation'
-            See .timeseries.similarity_measure for more information.
-
-        Raises
-        ------
-        ValueError
-        If func_vol and atlas do not have the same 3D shape.
-        """
         self.image              = image
         self.atlas              = atlas
         self.mask               = mask
@@ -77,34 +75,39 @@ class FunctionalConnectivity(object):
         self.roi_list           = roi_list
         self.selection_method   = selection_method
         self.similarity_measure = similarity_measure
+        self.use_lists          = False
 
+        self._self_check()
+        self.clear()
+
+    def clear(self):
         self._tseries       = None
         self._selected_ts   = None
         self._func_conn     = None
-        self._use_lists     = True
         self._args          = {}
 
-        self._set_up()
+        if self.use_lists:
+            self._tseries = []
+        else:
+            self._tseries = OrderedDict()
 
     def _self_check(self):
         try:
-            check_img_compatibility(self.image, self.atlas)
-        except:
+            check_img_compatibility(self.image, self.atlas, only_check_3d=True)
+        except NiftiFilesNotCompatible:
             log.exception('Functional and atlas volumes do not have the shame spatial shape.')
+            raise
+        except:
             raise
 
         if self.mask is not None:
             try:
-                check_img_compatibility(self.image, self.mask)
-            except:
+                check_img_compatibility(self.image, self.mask, only_check_3d=True)
+            except NiftiFilesNotCompatible:
                 log.exception('Functional and atlas volumes do not have the shame spatial shape.')
                 raise
-
-    def _set_up(self):
-        if self._use_lists:
-            self._tseries = []
-        else:
-            self._tseries = OrderedDict()
+            except:
+                raise
 
     def extract_timeseries(self, **kwargs):
         """
@@ -138,11 +141,6 @@ class FunctionalConnectivity(object):
                 nitime.analysis.FilterAnalyzer, using the method chosen here (defaults
                 to 'fir')
         """
-        try:
-            self._self_check()
-        except:
-            raise
-
         mask_vol = None
         if self.mask is not None:
             mask_vol = self.mask.get_data()
@@ -174,8 +172,7 @@ class FunctionalConnectivity(object):
                                                         None)
                 self._tseries[r] = tsset
         else:
-            raise ValueError('Error extracting timeseries data from {}.'
-                             ''.format(repr_imgs(func_vol)))
+            raise ValueError('Error extracting timeseries data from {}.'.format(repr_imgs(func_vol)))
 
 
     def _select_timeseries(self, **kwargs):
