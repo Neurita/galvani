@@ -7,9 +7,11 @@
 # Use this at your own risk!
 # -------------------------------------------------------------------------------
 
+from   collections       import OrderedDict
+
 import numpy             as np
 import nitime.fmri.io    as fio
-from   nitime.timeseries import TimeSeries
+import nitime.timeseries as ts
 
 
 class TimeSeriesSelector(object):
@@ -36,24 +38,33 @@ class TimeSeriesSelector(object):
         Parameters
         -----------
         ts_set: nitime.timeseries.TimeSeries or numpy.ndarray
-            n_timeseries x ts_size
+            n_timeseries x n_timepoints
 
         Returns
         -------
-        numpy.ndarray
-            N x time_size
+        selected_ts: numpy.ndarray
+            N x n_timepoints
         """
-        x = ts_set.data.copy() if isinstance(ts_set, TimeSeries) else ts_set.copy()
+        if isinstance(ts_set, ts.TimeSeries):
+            x = ts_set.data.copy()
+        elif isinstance(ts_set, np.ndarray):
+            x = ts_set.copy()
+        else:
+            raise ValueError('Expected `ts_set` argument to be nitime.timeseries.TimeSeries or numpy.ndarray, '
+                             'but got {}.'.format(type(ts_set)))
 
         self.ts_selector = self.algorithm(x, **kwargs)
 
-        if isinstance(ts_set, TimeSeries):
-            nu_ts      = ts_set.copy()
-            nu_ts.data = x
-        else:
-            nu_ts = x
+        # I don't know if this is needed:
+        # flatten the vectors that have first dimension of size 1
+        #if self.ts_selector.selected_ts.shape[0] == 1 and self.ts_selector.selected_ts.ndim == 2:
+        #    self.ts_selector.selected_ts = self.ts_selector.selected_ts.flatten()
 
-        self.selected_ts = nu_ts
+        if isinstance(ts_set, ts.TimeSeries):
+            self.selected_ts      = ts_set.copy()
+            self.selected_ts.data = self.ts_selector.selected_ts
+        else:
+            self.selected_ts      = self.ts_selector.selected_ts
 
         return self.selected_ts
 
@@ -67,16 +78,16 @@ class MeanTimeSeries(object):
         Parameters
         ----------
         ts_set: numpy.ndarray
-            n_samps x time_size. Time series matrix.
+            n_samps x n_timepoints. Time series matrix.
 
         kwargs: (not used here)
 
         Returns
         -------
-        average timeseries: numpy.ndarray (1 x time_size)
+        avg_timeseries: numpy.ndarray (1 x time_size)
             Will return the same type as ts_set.
         """
-        self.selected_ts = ts_set.data.mean(axis=0) if hasattr(ts_set, 'data') else ts_set.mean(axis=0)
+        self.selected_ts = np.mean(ts_set, axis=0)
 
 
 class EigenTimeSeries(object):
@@ -86,7 +97,7 @@ class EigenTimeSeries(object):
     Parameters
     ----------
     ts_set: numpy.ndarray
-        n_samps x time_size. Time series matrix.
+        n_samps x n_timepoints. Time series matrix.
 
     Kwargs:  'n_comps'   : the number of components to be selected from the set. Default 1.
              'comps_perc': the percentage of components to be selected from the set
@@ -113,8 +124,7 @@ class EigenTimeSeries(object):
             n_comps = np.floor(x.shape[0] * comps_perc)
 
         pca = PCA(n_components=n_comps)
-
-        x = pca.fit_transform(x.T).T
+        x   = pca.fit_transform(x.T).T
 
         if x.shape[0] > n_comps:
             x = x.data[0:n_comps, :]
@@ -127,8 +137,8 @@ class ILSIATimeSeries(object):
 
     Input:
     -----
-    ts_set:  nitime.Timeseries or ndarray
-        n_samps x time_size. Time series matrix.
+    ts_set: numpy.ndarray
+        n_samps x n_timepoints. Time series matrix.
 
     Kwargs:  'alpha'   : Chebyshev-best approximation tolerance threshold (>= 0). Default = 0.
 
@@ -158,7 +168,7 @@ class CCATimeSeries(object):
     Parameters
     ----------
     ts_set:  numpy.ndarray
-        n_samps x time_size. Time series matrix.
+        n_samps x n_timepoints. Time series matrix.
 
     Kwargs:  'n_comps'   : the number of components to be selected from the set. Default 1.
              'comps_perc': the percentage of components to be selected from the set
@@ -191,7 +201,7 @@ class FilteredTimeSeries(object):
     Parameters
     ----------
     ts_set: numpy.ndarray
-        n_samps x time_size. Time series matrix.
+        n_samps x n_timepoints. Time series matrix.
 
     kwargs:
         TR: float
@@ -271,8 +281,8 @@ class FilteredTimeSeries(object):
         for f in sel_filter:
             if f is not None:
                 filt = {}
-                filt['lb']     = f.get('lb', 0)
-                filt['ub']     = f.get('ub', None)
+                filt['lb']     = f.get('lb',     0)
+                filt['ub']     = f.get('ub',     np.Inf)
                 filt['method'] = f.get('method', 'fir')
 
                 filts.append(fio._tseries_from_nifti_helper(None, timeseries, TR, filt,
@@ -287,13 +297,13 @@ class FilteredTimeSeries(object):
         return x_filt
 
 
-class MeanAndFilteredTimeSeries(MeanTimeSeries, FilteredTimeSeries):
+class MeanFilteredTimeSeries(MeanTimeSeries, FilteredTimeSeries):
     """Return from an array of timeseries the average and filtered versions of it.
 
     Parameters
     ----------
     ts_set:  numpy.ndarray
-        n_samps x time_size. Time series matrix.
+        n_samps x n_timepoints. Time series matrix.
 
         Kwargs
         ------
@@ -328,14 +338,15 @@ class MeanAndFilteredTimeSeries(MeanTimeSeries, FilteredTimeSeries):
         MeanTimeSeries.__init__    (self, self.selected_ts, **kwargs)
 
 
-class EigenAndFilteredTimeSeries(EigenTimeSeries, FilteredTimeSeries):
+class EigenFilteredTimeSeries(EigenTimeSeries, FilteredTimeSeries):
+    """The eigen timeseries of the filtered timeseries"""
 
     def __init__(self, ts_set, **kwargs):
         FilteredTimeSeries.__init__(self, ts_set, **kwargs)
         EigenTimeSeries.__init__   (self, self.selected_ts, **kwargs)
 
 
-class TimeseriesSelectorFactory(object):
+class TimeSeriesSelectorFactory(object):
 
     def __init__(self):
         pass
@@ -346,26 +357,28 @@ class TimeseriesSelectorFactory(object):
 
         Parameters
         ----------
-        method_name: string
+        method_name: str
             Choices for name of the method: 'mean', 'eigen', 'ilsia', 'cca'
-                                            'filtered', 'mean_and_filtered', 'eigen_and_filtered'
+                                            'filtered', 'filtered_mean', 'filtered_eigen'
 
         Returns
         -------
         callable object
             Timeseries selection method function
         """
-        algorithm = MeanTimeSeries
-        if method_name == 'mean' : algorithm = MeanTimeSeries
-        if method_name == 'eigen': algorithm = EigenTimeSeries
-        if method_name == 'ilsia': algorithm = ILSIATimeSeries
-        if method_name == 'cca'  : algorithm = CCATimeSeries
+        methods = OrderedDict([ ('mean',          MeanTimeSeries),
+                                ('eigen',         EigenTimeSeries),
+                                ('ilsia',         ILSIATimeSeries),
+                                ('cca',           CCATimeSeries),
+                                ('filtered',      FilteredTimeSeries),
+                                ('filtered_mean', MeanFilteredTimeSeries),
+                                ('filered_eigen', EigenFilteredTimeSeries)])
 
-        if method_name == 'filtered'          : algorithm = FilteredTimeSeries
-        if method_name == 'mean_and_filtered' : algorithm = MeanAndFilteredTimeSeries
-        if method_name == 'eigen_and_filtered': algorithm = EigenAndFilteredTimeSeries
+        if method_name not in methods:
+            raise KeyError('Could not find a method object for the name {}. '
+                           'Please give one of the following {}.'.format(method_name, list(methods.keys())))
 
-        return TimeSeriesSelector(algorithm)
+        return TimeSeriesSelector(methods[method_name])
 
 #TODO?
 ##-------------------------------------------------------------------------------
