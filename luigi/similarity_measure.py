@@ -7,9 +7,9 @@
 #Use this at your own risk!
 #-------------------------------------------------------------------------------
 
-import numpy as np
-import nitime
-import nitime.analysis as nta
+from   collections      import  OrderedDict
+import numpy            as      np
+import nitime.analysis  as      nta
 
 #TODO: Give the option here to use full matrices, instead of just ts_sets
 
@@ -29,6 +29,7 @@ class TimeSeriesGroupMeasure(object):
     """
     def __init__(self, algorithm):
         self.algorithm = algorithm
+        self.measurer  = None
         self.measure   = None
 
     def fit_transform(self, ts_set1, ts_set2, **kwargs):
@@ -45,7 +46,15 @@ class TimeSeriesGroupMeasure(object):
         Returns
         -------
             The result of applying self.algorithm to ts_set1 and ts_set2.
+
+        Notes
+        -----
+            Both timeseries sets must have the same sampling_interval
         """
+        if ts_set1.sampling_interval != ts_set2.sampling_interval:
+            raise ValueError('`ts_set1` and `ts_set2` must have the same sampling_interval, '
+                             'got {} and {}.'.format(ts_set1.sampling_interval, ts_set2.sampling_interval))
+
         self.measurer = self.algorithm(ts_set1, ts_set2, **kwargs)
 
         self.measure  = self.measurer.measure
@@ -78,19 +87,19 @@ class NiCorrelationMeasure(object):
     float
         Scalar correlation value
     """
-    def __init__(self, ts_set1, ts_set2, lb=0, ub=None, TR=2, **kwargs):
-        self.measure = self._fit(ts_set1, ts_set2, TR=TR)
+    def __init__(self, ts_set1, ts_set2, lb=0, ub=np.Inf, TR=2, **kwargs):
+        self.measure = self._fit(ts_set1, ts_set2)
 
     @staticmethod
-    def _fit(ts_set1, ts_set2, TR):
+    def _fit(ts_set1, ts_set2):
         if ts_set1.data.ndim == 1:
             ts_data = np.concatenate([[ts_set1.data, ts_set2.data]])
         else:
             ts_data = np.concatenate([ts_set1.data, ts_set2.data])
 
-        ts = nitime.TimeSeries(ts_data, sampling_interval=TR)
-
-        corr = nta.CorrelationAnalyzer(ts)
+        ts      = ts_set1.copy()
+        ts.data = ts_data
+        corr    = nta.CorrelationAnalyzer(ts)
 
         return corr.corrcoef[0, 1]
 
@@ -117,19 +126,19 @@ class NiCoherenceMeasure(object):
     float
         Scalar coherence value
     """
-    def __init__(self, ts_set1, ts_set2, lb=0, ub=None, TR=2, **kwargs):
-        self.measure = self._fit(ts_set1, ts_set2, lb, ub, TR)
+    def __init__(self, ts_set1, ts_set2, lb=0, ub=np.Inf, TR=2, **kwargs):
+        self.measure = self._fit(ts_set1, ts_set2, lb, ub)
 
     @staticmethod
-    def _fit(ts_set1, ts_set2, lb, ub, TR):
+    def _fit(ts_set1, ts_set2, lb, ub):
         if ts_set1.data.ndim == 1:
             ts_data = np.concatenate([[ts_set1.data, ts_set2.data]])
         else:
             ts_data = np.concatenate([ts_set1.data, ts_set2.data])
 
-        ts = nitime.TimeSeries(ts_data, sampling_interval=TR)
-
-        coh = nta.CoherenceAnalyzer(ts)
+        ts      = ts_set1.copy()
+        ts.data = ts_data
+        coh     = nta.CoherenceAnalyzer(ts)
 
         freq_idx_coh = np.where((coh.frequencies > lb) * (coh.frequencies < ub))[0]
 
@@ -159,19 +168,19 @@ class NiGrangerCausalityMeasure(object):
     float
         Scalar Granger causality value
     """
-    def __init__(self, ts_set1, ts_set2, lb=0, ub=None, TR=2, **kwargs):
-        self.measure = self._fit(ts_set1, ts_set2, lb, ub, TR)
+    def __init__(self, ts_set1, ts_set2, lb=0, ub=np.Inf, TR=2, **kwargs):
+        self.measure = self._fit(ts_set1, ts_set2, lb, ub)
 
     @staticmethod
-    def _fit(ts_set1, ts_set2, lb, ub, TR):
+    def _fit(ts_set1, ts_set2, lb, ub):
         if ts_set1.data.ndim == 1:
             ts_data = np.concatenate([[ts_set1.data, ts_set2.data]])
         else:
             ts_data = np.concatenate([ts_set1.data, ts_set2.data])
 
-        ts = nitime.TimeSeries(ts_data, sampling_interval=TR)
-
-        gc = nta.GrangerAnalyzer(ts, order=1)
+        ts      = ts_set1.copy()
+        ts.data = ts_data
+        gc      = nta.GrangerAnalyzer(ts, order=1)
 
         freq_idx_gc = np.where((gc.frequencies > lb) * (gc.frequencies < ub))[0]
 
@@ -194,7 +203,7 @@ class CorrelationMeasure(object):
     numpy.ndarray (n_samps1 x n_samps2)
         correlation values
     """
-    def __init__(self, ts_set1, ts_set2, lb=0, ub=None, TR=2, **kwargs):
+    def __init__(self, ts_set1, ts_set2, lb=0, ub=np.Inf, TR=2, **kwargs):
         self.measure = self._fit(ts_set1, ts_set2)
 
     @staticmethod
@@ -203,7 +212,7 @@ class CorrelationMeasure(object):
 
         n1 = ts_set1.shape[0]
         n2 = ts_set2.shape[0]
-        if (ts_set1.ndim > 1 or ts_set2.ndim > 1) and n1 == n2 > 1:
+        if (ts_set1.data.ndim > 1 or ts_set2.data.ndim > 1) and n1 == n2 > 1:
             mp = np.array(n1, n2)
             for i1 in list(range(n1)):
                 t1 = ts_set1[i1, :]
@@ -214,7 +223,7 @@ class CorrelationMeasure(object):
             return mp
 
         else:
-            return pearsonr(ts_set1.flatten(), ts_set2.flatten())[0]
+            return pearsonr(ts_set1.data.flatten(), ts_set2.data.flatten())[0]
 
 
 
@@ -243,7 +252,7 @@ class SeedCorrelationMeasure(object):
     list
         List of correlation values
     """
-    def __init__(self, ts_set1, ts_set2, lb=0, ub=None, TR=2, **kwargs):
+    def __init__(self, ts_set1, ts_set2, lb=0, ub=np.Inf, TR=2, **kwargs):
         self.measure = self._fit(ts_set1, ts_set2)
 
     @staticmethod
@@ -261,7 +270,6 @@ class SeedCorrelationMeasure(object):
                 cor.append(analyzer.corrcoef[seed])
 
         return cor
-
 
 class MeanSeedCorrelationMeasure(SeedCorrelationMeasure):
     """Return the mean correlation value of all seed correlations the time series in ts_set1 and ts_set2.
@@ -288,9 +296,9 @@ class MeanSeedCorrelationMeasure(SeedCorrelationMeasure):
     float
         Average correlation value
     """
-    def __init__(self, ts_set1, ts_set2, lb=0, ub=None, TR=2, **kwargs):
+    def __init__(self, ts_set1, ts_set2, lb=0, ub=np.Inf, TR=2, **kwargs):
 
-        super(MeanSeedCorrelationMeasure, self).__init__(ts_set1, ts_set2, lb=lb, ub=ub, TR=TR, **kwargs)
+        SeedCorrelationMeasure.__init__(self, ts_set1, ts_set2, lb=lb, ub=ub, TR=TR, **kwargs)
         self.measure = np.mean(self.measure)
 
 
@@ -319,7 +327,7 @@ class SeedCoherenceMeasure(object):
     list
         List of coherence values.
     """
-    def __init__(self, ts_set1, ts_set2, lb=0, ub=None, TR=2, **kwargs):
+    def __init__(self, ts_set1, ts_set2, lb=0, ub=np.Inf, TR=2, **kwargs):
         self.measure = self._fit(ts_set1, ts_set2, lb, ub, **kwargs)
 
     @staticmethod
@@ -347,7 +355,7 @@ class SeedCoherenceMeasure(object):
 
 class MeanSeedCoherenceMeasure(SeedCoherenceMeasure):
 
-    def __init__(self, ts_set1, ts_set2, lb=0, ub=None, TR=2, **kwargs):
+    def __init__(self, ts_set1, ts_set2, lb=0, ub=np.Inf, TR=2, **kwargs):
         """Return the mean coherence value of all seed coherences the time series in ts_set1 and ts_set2.
 
         Parameters
@@ -372,7 +380,14 @@ class MeanSeedCoherenceMeasure(SeedCoherenceMeasure):
         float
             Average coherence value
         """
-        super(MeanSeedCoherenceMeasure, self).__init__(ts_set1, ts_set2, lb=lb, ub=ub, TR=TR, **kwargs)
+        SeedCoherenceMeasure.__init__(self, ts_set1, ts_set2, lb=lb, ub=ub, TR=TR, **kwargs)
+        self.measure = np.mean(self.measure)
+
+
+class MeanCoherenceMeasure(NiCoherenceMeasure):
+
+    def __init__(self, ts_set1, ts_set2, lb=0, ub=np.Inf, TR=2, **kwargs):
+        NiCoherenceMeasure.__init__(self, ts_set1, ts_set2, lb=lb, ub=ub, TR=TR, **kwargs)
         self.measure = np.mean(self.measure)
 
 
@@ -390,7 +405,7 @@ class SimilarityMeasureFactory(object):
         ----------
         method_name: string
             Choices:
-            'correlation', 'coherence', 'nicorrelation', 'grangercausality'
+            'correlation', 'coherence', 'nicorrelation', 'grangercausality', 'mean_coherence',
             'seedcorrelation', 'seedcoherence', 'mean_seedcoherence', 'mean_seedcorrelation'
 
         Returns
@@ -402,22 +417,25 @@ class SimilarityMeasureFactory(object):
         -----
         See: http://nipy.org/nitime/examples/seed_analysis.html for more information
         """
+        methods = OrderedDict([ ('correlation',             CorrelationMeasure),
+                                ('coherence',               NiCoherenceMeasure),
+                                ('grangercausality',        NiGrangerCausalityMeasure),
+                                ('nicorrelation',           NiCorrelationMeasure),
+                                ('seedcorrelation',         SeedCorrelationMeasure),
+                                ('seedcoherence',           SeedCoherenceMeasure),
+                                ('mean_coherence',          MeanCoherenceMeasure),
+                                ('mean_seedcoherence',      MeanSeedCoherenceMeasure),
+                                ('mean_seedcorrelation',    MeanSeedCorrelationMeasure)])
 
-        algorithm = CorrelationMeasure
-        if method_name == 'correlation'            : algorithm = CorrelationMeasure
-        if method_name == 'coherence'              : algorithm = NiCoherenceMeasure
-        if method_name == 'grangercausality'       : algorithm = NiGrangerCausalityMeasure
-        if method_name == 'nicorrelation'          : algorithm = NiCorrelationMeasure
+        if method_name not in methods:
+            raise KeyError('Could not find a method object for the name {}. '
+                           'Please give one of the following {}.'.format(method_name, list(methods.keys())))
 
-        if method_name == 'seedcorrelation'        : algorithm = SeedCorrelationMeasure
-        if method_name == 'seedcoherence'          : algorithm = SeedCoherenceMeasure
-        if method_name == 'mean_seedcoherence'     : algorithm = MeanSeedCoherenceMeasure
-        if method_name == 'mean_seedcorrelation'   : algorithm = MeanSeedCorrelationMeasure
+        return TimeSeriesGroupMeasure(methods[method_name])
 
         #if method_name == 'mutual_information' : algorithm = MutualInformationMeasure
         #if method_name == 'granger_causality'  : algorithm = GrangerCausalityMeasure
 
-        return TimeSeriesGroupMeasure(algorithm)
 
 
 # import os
