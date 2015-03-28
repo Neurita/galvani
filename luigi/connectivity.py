@@ -1,11 +1,12 @@
 # coding=utf-8
-#-------------------------------------------------------------------------------
-#Author: Alexandre Manhães Savio <alexsavio@gmail.com>
-#Grupo de Inteligencia Computational <www.ehu.es/ccwintco>
-#Universidad del Pais Vasco UPV/EHU
+
+# -------------------------------------------------------------------------------
+# Author: Alexandre Manhães Savio <alexsavio@gmail.com>
+# Grupo de Inteligencia Computational <www.ehu.es/ccwintco>
+# Universidad del Pais Vasco UPV/EHU
 #
-#Use this at your own risk!
-#-------------------------------------------------------------------------------
+# Use this at your own risk!
+# -------------------------------------------------------------------------------
 
 import logging
 
@@ -13,14 +14,251 @@ import numpy                as np
 import nitime.fmri.io       as tsio
 
 from   collections          import OrderedDict
-from   boyle.nifti.check    import check_img_compatibility, repr_imgs
+from   boyle.nifti.check    import check_img_compatibility
 from   boyle.nifti.roi      import partition_timeseries
 from   boyle.exceptions     import NiftiFilesNotCompatible
 
-from   .selection           import TimeseriesSelectorFactory
+from   .selection           import TimeSeriesSelectorFactory
 from   .similarity_measure  import SimilarityMeasureFactory
 
 log = logging.getLogger(__name__)
+
+
+def build_timeseries(data, sampling_interval, pre_filter, normalize):
+    """ Create a nitime.timeseries.TimeSeries object.
+
+    Parameters
+    ----------
+    data: numpy.ndarray
+        n_samples x timepoints data array
+
+    sampling_interval: int or float
+        sampling interval of the data
+
+    normalize: Whether to normalize the activity in each voxel, defaults to
+        None, in which case the original fMRI signal is used. Other options are:
+        'percent': the activity in each voxel is converted to percent
+        change, relative to this scan.
+        'zscore': the activity is converted to a zscore relative to the mean and
+        std in this voxel in this scan.
+
+    pre_filter: dict, optional
+        If provided with a dict of the form:
+        :var 'lb': float or 0
+        Filter lower-bound
+
+        :var 'ub': float or None
+        Filter upper-bound
+
+        :var 'method': string
+        Filtering method
+        Choices: 'fourier','boxcar', 'fir' or 'iir'
+
+        Each voxel's data will be filtered into the frequency range [lb, ub] with
+        nitime.analysis.FilterAnalyzer, using the method chosen here (defaults
+        to 'fir')
+
+    Returns
+    -------
+    timeseries: nitime.timeseries.TimeSeries
+        A set of timeseries
+    """
+    return tsio._tseries_from_nifti_helper(None, data, sampling_interval, pre_filter, normalize, None)
+
+
+def extract_timeseries(img_data, atlas_data, mask_data, roi_values, sampling_interval, pre_filter, normalize,
+                       use_dict=True):
+    """ Extract the timeseries data from each atlas_data ROI from the 4th dimension of img_data.
+
+    img_data: numpy.ndarray
+        4D array from where the timseries will be extracted.
+
+    atlas_data:
+        3D array with the different ROIs.
+
+    mask_data: numpy.ndarray
+        3D array that masks the voxels of interest for the whole extraction.
+
+    roi_values: list of values of the atlas
+        If not None, will use only the values in this list to extract the timeseries.
+
+    sampling_interval: int or float
+        Sampling interval of the data.
+
+    normalize: Whether to normalize the activity in each voxel, defaults to
+        None, in which case the original fMRI signal is used. Other options are:
+        'percent': the activity in each voxel is converted to percent
+        change, relative to this scan.
+        'zscore': the activity is converted to a zscore relative to the mean and
+        std in this voxel in this scan.
+
+    pre_filter: dict, optional
+        If provided with a dict of the form:
+        :var 'lb': float or 0
+        Filter lower-bound
+
+        :var 'ub': float or np.Inf
+        Filter upper-bound
+
+        :var 'method': string
+        Filtering method
+        Choices: 'fourier','boxcar', 'fir' or 'iir'
+
+        Each voxel's data will be filtered into the frequency range [lb, ub] with
+        nitime.analysis.FilterAnalyzer, using the method chosen here (defaults
+        to 'fir')
+
+    use_dict: bool
+        If True will use an OrderedDict to hold the timeseries for each ROI. Where the key is the ROI value.
+        Otherwise will use a list.
+
+    Returns
+    -------
+    tseries: a dict or a list of nitime.timeseries.TimeSeries
+    """
+    partitioned = partition_timeseries(img_data, atlas_data, mask_data, zeroe=True, roi_values=roi_values,
+                                       outdict=use_dict)
+
+    if isinstance(partitioned, list):
+        timeseries_set = []
+        #filtering
+        for ts in timeseries_set:
+            timeseries_set.append(build_timeseries(ts, sampling_interval, pre_filter, normalize))
+
+    elif isinstance(partitioned, dict):
+        timeseries_set = OrderedDict()
+        #filtering
+        for r in roi_values:
+            timeseries_set[r] = build_timeseries(partitioned[r], sampling_interval, pre_filter, normalize)
+    else:
+        raise ValueError('`partition_timeseries` function returned {}, '
+                         'but expected list or dict.'.format(type(partitioned)))
+
+    return timeseries_set
+
+
+def transform_timeseries(timeseries, selection_method, **kwargs):
+    """
+    Select significant timeseries from each set of timeseries in the dict or list of sets.
+    Each item in ts_set will be transformed to one or fewer timeseries.
+
+    Parameters
+    ----------
+    timeseries: dict or list of nitime.timeseries.TimeSeries
+
+    selection_method: luigi.selection.TimeSeriesSelector
+        Any timeseries transformation/selection method from TimeSeriesSelectorFactory.
+        See luigi.selection.TimeSeriesSelectorFactory.create_method for more information and the possible choices.
+
+    kwargs: dict with the following keys, all are optional
+
+        'n_comps'   : int
+            The number of components to be selected from the set. Default 1.
+
+        'comps_perc': float from [0, 100]
+            The percentage of components to be selected from the set, will
+            ignore 'n_comps' if this is set.
+
+        #TODO
+        'shifts': int or dict
+            For lagged ts generation.
+            If provided with an int b, will use the range [-b, b]
+            If provided with a dict of the form:
+            :var 'lb': int
+            :var 'ub': int
+            For each value in range(lb, ub+1) a lagged version of each
+            extracted ts will be included in the ts set. Default: {'lb': -3, 'ub': +3}
+
+    Returns
+    -------
+    dict or list
+        OrderedDict or list with the same keys as ts_set, where each item in ts_set is
+        a transformed/reduced set of timeseries. self._selected_ts
+    """
+    if isinstance(timeseries, list):
+        trans_timeseries = []
+        for ts in timeseries:
+            trans_timeseries.append(selection_method.fit_transform(ts, **kwargs))
+
+    elif isinstance(timeseries, dict):
+        trans_timeseries = OrderedDict()
+        for r in timeseries:
+            trans_timeseries[r] = selection_method.fit_transform(timeseries[r], **kwargs)
+    else:
+        raise ValueError('`timeseries` argument was expected to be a dict or a list,'
+                         ' but got a {}.'.format(type(timeseries)))
+
+    return trans_timeseries
+
+
+def calculate_connectivity(timeseries_set, measure, sampling_interval, lb=0, ub=np.Inf, **kwargs):
+    """ Return a matrix with the connectivity measures between each pair of timeseries in timeseries_set.
+
+    Parameters
+    ----------
+    timeseries_set: list or dict of nitime.timeseries.TimeSeries
+        The timeseries.
+        The return matrix will use the same order as they have here.
+        Be careful with dict and non-numerical keys.
+
+    measure: luigi.TimeSeriesGroupMeasure
+        Any measure method returned from luigi.similarity_measure.SimilarityMeasureFactory.
+        See luigi.similarity_measure.SimilarityMeasureFactory.create_method for more information
+        and the possible choices.
+
+    sampling_interval: int or float
+        Sampling interval of the data.
+
+    lb: float (optional)
+    ub: float (optional)
+        Lower and upper band of a pass-band into which the data will be
+        filtered. Default: lb=0, ub=np.Inf (max frequency).
+        Define a frequency band of interest.
+
+    kwargs: keyword arguments
+        Sent to the corresponding `measure` method.
+
+    Returns
+    -------
+    conns: numpy.ndarray
+        Connectivity matrix
+
+    Raises
+    ------
+    ValueError
+        If `timeseries_set` is not a list or a dict.
+    """
+    if not isinstance(timeseries_set, list) and not isinstance(timeseries_set, dict):
+        raise ValueError('Expected a list or dict for `timeseries_set` but got a {}.'.format(type(timeseries_set)))
+
+    n_rois = len(timeseries_set)
+    conns  = np.zeros((n_rois, n_rois))
+
+    #TODO
+    # this will benefit from the ordering of the time series and
+    # calculate only half matrix, then sum its transpose
+    if isinstance(timeseries_set, list):
+
+        for tsi1, ts1 in enumerate(timeseries_set):
+            for tsi2, ts2 in enumerate(timeseries_set):
+                conns[tsi1, tsi2] = measure.fit_transform(ts1, ts2, lb=lb, ub=ub, TR=sampling_interval, **kwargs)
+
+    # this will calculate the cmat fully without the "symmetrization"
+    elif isinstance(timeseries_set, dict):
+
+        c1 = 0
+        for tsi1 in timeseries_set:
+            c2 = 0
+            for tsi2 in timeseries_set:
+                conns[c1, c2] = measure.fit_transform(timeseries_set[tsi1], timeseries_set[tsi2], lb=lb, ub=ub,
+                                                      TR=sampling_interval, **kwargs)
+                c2 += 1
+            c1 += 1
+
+    #cmat = cmat + cmat.T
+    #cmat[np.diag_indices_from(cmat)] /= 2
+
+    return conns
 
 
 class FunctionalConnectivity(object):
@@ -51,20 +289,17 @@ class FunctionalConnectivity(object):
 
     selection_method: string
         Defines the timeseries selection method to be applied within each ROI.
-        Choices: 'mean', 'eigen', 'ilsia', 'cca'
-                 'filtered', 'mean_and_filtered', 'eigen_and_filtered'
-        See .timeseries.selection more information.
+        See `luigi.selection.TimeSeriesSelectorFactory.create_method` more information and the possible choices.
 
     similarity_measure: string
         Defines the similarity measure method to be used between selected timeseries.
-        Choices: 'crosscorrelation', 'correlation', 'coherence',
-                 'mean_coherence', 'mean_correlation', 'nicorrelation'
-        See .timeseries.similarity_measure for more information.
+        See `luigi.similarity_measure.SimilarityMeasureFactory.create_method` for more information and
+        the possible choices.
 
     Raises
     ------
     ValueError
-    If func_vol and atlas do not have the same 3D shape.
+        If func_vol and atlas do not have the same 3D shape.
     """
     def __init__(self, image, atlas, mask=None, TR=2, roi_list=None,
                  selection_method='eigen', similarity_measure='correlation'):
@@ -75,7 +310,7 @@ class FunctionalConnectivity(object):
         self.roi_list           = roi_list
         self.selection_method   = selection_method
         self.similarity_measure = similarity_measure
-        self.use_lists          = False
+        self._use_dict          = False
 
         self._self_check()
         self.clear()
@@ -92,6 +327,11 @@ class FunctionalConnectivity(object):
             self._tseries = OrderedDict()
 
     def _self_check(self):
+        self._check_atlas()
+        if self.mask is not None:
+            self._check_mask()
+
+    def _check_atlas(self):
         try:
             check_img_compatibility(self.image, self.atlas, only_check_3d=True)
         except NiftiFilesNotCompatible:
@@ -100,18 +340,18 @@ class FunctionalConnectivity(object):
         except:
             raise
 
-        if self.mask is not None:
-            try:
-                check_img_compatibility(self.image, self.mask, only_check_3d=True)
-            except NiftiFilesNotCompatible:
-                log.exception('Functional and atlas volumes do not have the shame spatial shape.')
-                raise
-            except:
-                raise
+    def _check_mask(self):
+        try:
+            check_img_compatibility(self.image, self.mask, only_check_3d=True)
+        except NiftiFilesNotCompatible:
+            log.exception('Functional and atlas volumes do not have the shame spatial shape.')
+            raise
+        except:
+            raise
 
     def extract_timeseries(self, **kwargs):
         """
-        Extract from the functional volume the timseries and separate them
+        Extract from the functional volume the timeseries and separate them
         in an ordered dict in self._tseries.
 
         Parameters
@@ -130,7 +370,7 @@ class FunctionalConnectivity(object):
                 :var 'lb': float or 0
                 Filter lower-bound
 
-                :var 'ub': float or None
+                :var 'ub': float or np.Inf
                 Filter upper-bound
 
                 :var 'method': string
@@ -141,39 +381,18 @@ class FunctionalConnectivity(object):
                 nitime.analysis.FilterAnalyzer, using the method chosen here (defaults
                 to 'fir')
         """
-        mask_vol = None
+        mask_data = None
         if self.mask is not None:
-            mask_vol = self.mask.get_data()
+            mask_data = self.mask.get_data()
 
-        func_vol  = self.image.get_data()
-        atlas_vol = self.atlas.get_data()
+        img_data   = self.image.get_data()
+        atlas_data = self.atlas.get_data()
 
         pre_filter = kwargs.pop('pre_filter', None)
-        normalize  = kwargs.pop('normalize', None)
+        normalize  = kwargs.pop('normalize',  None)
 
-        tseries = partition_timeseries(func_vol, atlas_vol, mask_vol, zeroe=True, roi_values=self.roi_list,
-                                       outdict=(not self._use_lists))
-
-        if isinstance(tseries, list):
-            #filtering
-            for ts in tseries:
-                tsset = tsio._tseries_from_nifti_helper(None, ts,
-                                                        self.sampling_interval,
-                                                        pre_filter, normalize,
-                                                        None)
-                self._tseries.append(tsset)
-
-        elif isinstance(tseries, dict):
-            #filtering
-            for r in self.roi_list:
-                tsset = tsio._tseries_from_nifti_helper(None, tseries[r],
-                                                        self.sampling_interval,
-                                                        pre_filter, normalize,
-                                                        None)
-                self._tseries[r] = tsset
-        else:
-            raise ValueError('Error extracting timeseries data from {}.'.format(repr_imgs(func_vol)))
-
+        self._tseries = extract_timeseries(img_data, atlas_data, mask_data, self.roi_list, self.sampling_interval,
+                                           pre_filter, normalize, use_dict=self._use_dict)
 
     def _select_timeseries(self, **kwargs):
         """
@@ -203,8 +422,8 @@ class FunctionalConnectivity(object):
 
         Returns
         -------
-        dict
-            Dictionary with the same keys as ts_set, where each item in ts_set is
+        dict or list
+            OrderedDict or list with the same keys as ts_set, where each item in ts_set is
             a transformed/reduced set of timeseries. self._selected_ts
         """
         if self._tseries is None:
@@ -212,23 +431,12 @@ class FunctionalConnectivity(object):
             kwargs.pop('normalize')
             kwargs.pop('average')
 
-        ts_selector = TimeseriesSelectorFactory.create_method(self.selection_method)
-
-        if isinstance(self._tseries, dict):
-            self._selected_ts = OrderedDict()
-
-            for r in self.roi_list:
-                self._selected_ts[r] = ts_selector.fit_transform(self._tseries[r], **kwargs)
-
-        elif isinstance(self._tseries, list):
-            self._selected_ts = []
-            for ts in self._tseries:
-                self._selected_ts.append(ts_selector.fit_transform(ts, **kwargs))
+        self._selected_ts = transform_timeseries(self._tseries, **kwargs)
+        return self._selected_ts
 
     def _calculate_similarities(self, **kwargs):
         """
-        Calculate a matrix of correlations/similarities between all
-        timeseries in tseries.
+        Calculate a matrix of correlations/similarities between all timeseries in tseries.
 
         Parameters
         ----------
@@ -244,48 +452,18 @@ class FunctionalConnectivity(object):
 
             'ub': int
                 Upper bound frequency limit.
-                Default: None
+                Default: np.Inf
         """
         if self._selected_ts is None:
             self._select_timeseries(**kwargs)
 
-        simil_measure = SimilarityMeasureFactory.create_method(self.similarity_measure)
-
-        n_rois = len(self._selected_ts)
-        cmat = np.zeros((n_rois, n_rois))
+        measure = SimilarityMeasureFactory.create_method(self.similarity_measure)
 
         lb = kwargs.pop('lb', 0)
         ub = kwargs.pop('ub', None)
 
-        # this will benefit from the ordering of the time series and
-        # calculate only half matrix, then sum its transpose
-        if isinstance(self._selected_ts, list):
-
-            for tsi1, ts1 in enumerate(self._selected_ts):
-                for tsi2, ts2 in enumerate(self._selected_ts):
-                    cmat[tsi1, tsi2] = simil_measure.fit_transform(ts1, ts2,
-                                                                   lb=lb, ub=ub,
-                                                                   TR=self.sampling_interval, **kwargs)
-
-
-        # this will calculate the cmat fully without the "symmetrization"
-        elif isinstance(self._selected_ts, dict):
-
-            c1 = 0
-            for tsi1 in self.roi_list:
-                c2 = 0
-                for tsi2 in self.roi_list:
-                    cmat[c1, c2] = simil_measure.fit_transform(self._selected_ts[tsi1],
-                                                               self._selected_ts[tsi2],
-                                                               lb=lb, ub=ub,
-                                                               TR=self.sampling_interval, **kwargs)
-                    c2 += 1
-                c1 += 1
-
-        #cmat = cmat + cmat.T
-        #cmat[np.diag_indices_from(cmat)] /= 2
-
-        self._func_conn = cmat
+        self._func_conn = calculate_connectivity(self._selected_ts, measure=measure,
+                                                 sampling_interval=self.sampling_interval, lb=lb, ub=ub, **kwargs)
 
     def fit_transform(self, **kwargs):
         """
@@ -306,7 +484,7 @@ class FunctionalConnectivity(object):
             :var 'lb': float or 0
             Filter lower-bound
 
-            :var 'ub': float or None
+            :var 'ub': float or np.Inf
             Filter upper-bound
 
             :var 'method': string
@@ -343,7 +521,8 @@ class FunctionalConnectivity(object):
         in ts_set
         """
         self._args = kwargs
-        self._calculate_similarities(**self._args)
+        #self._select_timeseries     (**kwargs)
+        self._calculate_similarities(**kwargs)
         return self._func_conn
 
 
