@@ -417,15 +417,15 @@ class SimilarityMeasureFactory(object):
         -----
         See: http://nipy.org/nitime/examples/seed_analysis.html for more information
         """
-        methods = OrderedDict([ ('correlation',             CorrelationMeasure),
-                                ('coherence',               NiCoherenceMeasure),
-                                ('grangercausality',        NiGrangerCausalityMeasure),
-                                ('nicorrelation',           NiCorrelationMeasure),
-                                ('seedcorrelation',         SeedCorrelationMeasure),
-                                ('seedcoherence',           SeedCoherenceMeasure),
-                                ('mean_coherence',          MeanCoherenceMeasure),
-                                ('mean_seedcoherence',      MeanSeedCoherenceMeasure),
-                                ('mean_seedcorrelation',    MeanSeedCorrelationMeasure)])
+        methods = OrderedDict([ ('correlation',          CorrelationMeasure),
+                                ('coherence',            NiCoherenceMeasure),
+                                ('grangercausality',     NiGrangerCausalityMeasure),
+                                ('nicorrelation',        NiCorrelationMeasure),
+                                ('seedcorrelation',      SeedCorrelationMeasure),
+                                ('seedcoherence',        SeedCoherenceMeasure),
+                                ('mean_coherence',       MeanCoherenceMeasure),
+                                ('mean_seedcoherence',   MeanSeedCoherenceMeasure),
+                                ('mean_seedcorrelation', MeanSeedCorrelationMeasure)])
 
         if method_name not in methods:
             raise KeyError('Could not find a method object for the name {}. '
