@@ -327,11 +327,13 @@ class FunctionalConnectivity(object):
             self._tseries = OrderedDict()
 
     def _self_check(self):
+        """ Raise an exception if self.image, self.mask and self.atlas (the 3D part) are not compatible. """
         self._check_atlas()
         if self.mask is not None:
             self._check_mask()
 
     def _check_atlas(self):
+        """ Raise an exception if self.image and self.atlas (the 3D part) are not compatible. """
         try:
             check_img_compatibility(self.image, self.atlas, only_check_3d=True)
         except NiftiFilesNotCompatible:
@@ -341,6 +343,7 @@ class FunctionalConnectivity(object):
             raise
 
     def _check_mask(self):
+        """ Raise an exception if self.image and self.mask (the 3D part) are not compatible. """
         try:
             check_img_compatibility(self.image, self.mask, only_check_3d=True)
         except NiftiFilesNotCompatible:
@@ -431,7 +434,9 @@ class FunctionalConnectivity(object):
             kwargs.pop('normalize')
             kwargs.pop('average')
 
-        self._selected_ts = transform_timeseries(self._tseries, **kwargs)
+        selection_method = TimeSeriesSelectorFactory.create_method(self.selection_method)
+
+        self._selected_ts = transform_timeseries(self._tseries, selection_method, **kwargs)
         return self._selected_ts
 
     def _calculate_similarities(self, **kwargs):
