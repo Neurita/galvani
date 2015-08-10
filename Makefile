@@ -1,6 +1,6 @@
 .PHONY: help clean clean-pyc clean-build list test test-all coverage docs release sdist install develop install_deps
 
-project-name = luigi
+project-name = galvani
 
 help:
 	@echo "clean-build - remove build artifacts"

@@ -146,9 +146,9 @@ def transform_timeseries(timeseries, selection_method, **kwargs):
     ----------
     timeseries: dict or list of nitime.timeseries.TimeSeries
 
-    selection_method: luigi.selection.TimeSeriesSelector
+    selection_method: galvani.selection.TimeSeriesSelector
         Any timeseries transformation/selection method from TimeSeriesSelectorFactory.
-        See luigi.selection.TimeSeriesSelectorFactory.create_method for more information and the possible choices.
+        See galvani.selection.TimeSeriesSelectorFactory.create_method for more information and the possible choices.
 
     kwargs: dict with the following keys, all are optional
 
@@ -201,9 +201,9 @@ def calculate_connectivity(timeseries_set, measure, sampling_interval, lb=0, ub=
         The return matrix will use the same order as they have here.
         Be careful with dict and non-numerical keys.
 
-    measure: luigi.TimeSeriesGroupMeasure
-        Any measure method returned from luigi.similarity_measure.SimilarityMeasureFactory.
-        See luigi.similarity_measure.SimilarityMeasureFactory.create_method for more information
+    measure: galvani.TimeSeriesGroupMeasure
+        Any measure method returned from galvani.similarity_measure.SimilarityMeasureFactory.
+        See galvani.similarity_measure.SimilarityMeasureFactory.create_method for more information
         and the possible choices.
 
     sampling_interval: int or float
@@ -289,11 +289,11 @@ class FunctionalConnectivity(object):
 
     selection_method: string
         Defines the timeseries selection method to be applied within each ROI.
-        See `luigi.selection.TimeSeriesSelectorFactory.create_method` more information and the possible choices.
+        See `galvani.selection.TimeSeriesSelectorFactory.create_method` more information and the possible choices.
 
     similarity_measure: string
         Defines the similarity measure method to be used between selected timeseries.
-        See `luigi.similarity_measure.SimilarityMeasureFactory.create_method` for more information and
+        See `galvani.similarity_measure.SimilarityMeasureFactory.create_method` for more information and
         the possible choices.
 
     Raises

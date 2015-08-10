@@ -10,7 +10,7 @@
 #-------------------------------------------------------------------------------
 
 """
-The :mod:`luigi` module includes functions to handle timeseries
+The :mod:`galvani` module includes functions to handle timeseries
 from fMRI data: timeseries.selection has functions to select timeseries from
 sets of fMRI timeseries, and timeseries.similarity_measure has functions to
 measure similarities between sets of timeseries.
@@ -72,4 +72,3 @@ setup_logging()
 #__all__.extend(__conn_all__)
 #__all__.extend(__sel_all__)
 #__all__.extend(__sm_all__)
-
