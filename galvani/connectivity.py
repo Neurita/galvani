@@ -116,20 +116,30 @@ def extract_timeseries(img_data, atlas_data, mask_data, roi_values, sampling_int
     -------
     tseries: a dict or a list of nitime.timeseries.TimeSeries
     """
-    partitioned = partition_timeseries(img_data, atlas_data, mask_data, zeroe=True, roi_values=roi_values,
+    partitioned = partition_timeseries(img_data,
+                                       atlas_data,
+                                       mask_data,
+                                       zeroe=True,
+                                       roi_values=roi_values,
                                        outdict=use_dict)
 
     if isinstance(partitioned, list):
         timeseries_set = []
         #filtering
-        for ts in timeseries_set:
-            timeseries_set.append(build_timeseries(ts, sampling_interval, pre_filter, normalize))
+        for ts in partitioned:
+            timeseries_set.append(build_timeseries(data=ts,
+                                                   sampling_interval=sampling_interval,
+                                                   pre_filter=pre_filter,
+                                                   normalize=normalize))
 
     elif isinstance(partitioned, dict):
         timeseries_set = OrderedDict()
         #filtering
         for r in roi_values:
-            timeseries_set[r] = build_timeseries(partitioned[r], sampling_interval, pre_filter, normalize)
+            timeseries_set[r] = build_timeseries(data=partitioned[r],
+                                                 sampling_interval=sampling_interval,
+                                                 pre_filter=pre_filter,
+                                                 normalize=normalize)
     else:
         raise ValueError('`partition_timeseries` function returned {}, '
                          'but expected list or dict.'.format(type(partitioned)))

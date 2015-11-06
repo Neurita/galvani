@@ -29,7 +29,6 @@ class TimeSeriesSelector(object):
             The selection method
         """
         self.algorithm   = algorithm
-        self.selected_ts = None
 
     def fit_transform(self, ts_set, **kwargs):
         """

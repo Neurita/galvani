@@ -16,7 +16,6 @@ import nitime.utils     as      tsu
 
 #See Ledoit-Wolf covariance estimation and Graph-Lasso
 #http://www.sciencedirect.com/science/article/pii/S1053811910011602
-#http://nilearn.github.io/data_analysis/functional_connectomes.html
 #http://scikit-learn.org/stable/modules/covariance.html
 #http://nilearn.github.io/developers/group_sparse_covariance.html
 
@@ -104,11 +103,10 @@ class TimeSeriesGroupMeasure(object):
 
     Parameters
     ----------
-    algorithm: callable object
+    algorithm: callable Measure
     """
     def __init__(self, algorithm):
         self.algorithm = algorithm
-        self.measurer  = None
         self.measure   = None
 
     def fit_transform(self, ts_set1, ts_set2, **kwargs):
@@ -134,13 +132,23 @@ class TimeSeriesGroupMeasure(object):
             raise ValueError('`ts_set1` and `ts_set2` must have the same sampling_interval, '
                              'got {} and {}.'.format(ts_set1.sampling_interval, ts_set2.sampling_interval))
 
-        self.measurer = self.algorithm(ts_set1, ts_set2, **kwargs)
-        self.measure  = self.measurer.measure
+        self.measure = self.algorithm(ts_set1, ts_set2, **kwargs)
 
-        return self.measure
+        return self.measure()
 
 
-class NiCorrelationMeasure(object):
+class Measure(object):
+    """ A generic `n` vs `n` vectors similarity measure. Callable class"""
+
+    def __init__(self, ts_set1, ts_set2, **kwargs):
+        self.ts1 = ts_set1
+        self.ts2 = ts_set2
+
+    def __call__(self):
+        raise NotImplementedError
+
+
+class NiCorrelationMeasure(Measure):
     """Return a the Pearson's Correlation value between all time series in both sets.
     Calculates the correlation using nitime.
 
@@ -154,28 +162,20 @@ class NiCorrelationMeasure(object):
     ts_set2: nitime.TimeSeries: n_samps x time_size
         Time series
 
-    lb: float
-        Frequency lower bound
-
-    ub: float
-        Frequency upper bound
-
     Returns
     -------
     float
         Scalar correlation value
     """
-    def __init__(self, ts_set1, ts_set2, lb=0.02, ub=0.15, TR=2, **kwargs):
-        if ts_set1 == ts_set2:
-            self.measure = 1
-        else:
-            self.measure = self._fit(ts_set1, ts_set2)
+    def __init__(self, ts_set1, ts_set2, **kwargs):
+        super(NiCorrelationMeasure, self).__init__(ts_set1, ts_set2, **kwargs)
 
-    @staticmethod
-    def _fit(ts_set1, ts_set2):
-        ts   = concatenate_timeseries(ts_set1, ts_set2)
+    def __call__(self):
+        if self.ts1 == self.ts2:
+            return 1
+
+        ts   = concatenate_timeseries(self.ts1, self.ts2)
         corr = nta.CorrelationAnalyzer(ts)
-
         return corr.corrcoef[0, 1]
 
 
@@ -201,18 +201,19 @@ class NiCoherenceMeasure(object):
     float
         Scalar coherence value
     """
-    def __init__(self, ts_set1, ts_set2, lb=0.02, ub=0.15, TR=2, **kwargs):
-        if ts_set1 == ts_set2:
-            self.measure = 1
-        else:
-            self.measure = self._fit(ts_set1, ts_set2, lb, ub)
+    def __init__(self, ts_set1, ts_set2, **kwargs):
+        super(NiCoherenceMeasure, self).__init__(ts_set1, ts_set2, **kwargs)
+        self.lb = kwargs.get('lb', 0.02)
+        self.ub = kwargs.get('ub', 0.15)
 
-    @staticmethod
-    def _fit(ts_set1, ts_set2, lb, ub):
-        ts  = concatenate_timeseries(ts_set1, ts_set2)
+    def __call__(self):
+        if self.ts1 == self.ts2:
+            return 1
+
+        ts  = concatenate_timeseries(self.ts1, self.ts2)
         coh = nta.CoherenceAnalyzer(ts)
 
-        freq_idx_coh = np.where((coh.frequencies > lb) * (coh.frequencies < ub))[0]
+        freq_idx_coh = np.where((coh.frequencies > self.lb) * (coh.frequencies < self.ub))[0]
 
         mean_coh = np.mean(coh.coherence[:, :, freq_idx_coh], axis=-1)  # Averaging on the last dimension
         return np.mean(mean_coh) #average all of it
@@ -240,16 +241,17 @@ class NiGrangerCausalityMeasure(object):
     float
         Scalar Granger causality value
     """
-    def __init__(self, ts_set1, ts_set2, lb=0.02, ub=0.15, TR=2, **kwargs):
-        if ts_set1 == ts_set2:
-            self.measure = 1
-        else:
-            self.measure = self._fit(ts_set1, ts_set2, lb, ub)
+    def __init__(self, ts_set1, ts_set2, **kwargs):
+        super(NiGrangerCausalityMeasure, self).__init__(ts_set1, ts_set2, **kwargs)
+        self.lb = kwargs.get('lb', 0.02)
+        self.ub = kwargs.get('ub', 0.15)
 
-    @staticmethod
-    def _fit(ts_set1, ts_set2, lb, ub):
-        pts1 = create_ts_with_data(percent_change(ts_set1.data), ts_set1)
-        pts2 = create_ts_with_data(percent_change(ts_set2.data), ts_set2)
+    def __call__(self):
+        if self.ts1 == self.ts2:
+            return 1
+
+        pts1 = create_ts_with_data(percent_change(self.ts1.data), self.ts1)
+        pts2 = create_ts_with_data(percent_change(self.ts2.data), self.ts2)
         pts  = concatenate_timeseries(pts1, pts2)
 
         #cts  = concatenate_timeseries(ts_set1, ts_set2)
@@ -257,7 +259,7 @@ class NiGrangerCausalityMeasure(object):
         #pts  = create_ts_with_data   (pts, ts_set1)
         gc  = nta.GrangerAnalyzer    (pts, order=1)
 
-        freq_idx_gc = np.where((gc.frequencies > lb) * (gc.frequencies < ub))[0]
+        freq_idx_gc = np.where((gc.frequencies > self.lb) * (gc.frequencies < self.ub))[0]
 
         mean_gc = np.mean(gc.causality_xy[:, :, freq_idx_gc], -1)
         return np.nanmean(mean_gc)
@@ -279,32 +281,70 @@ class CorrelationMeasure(object):
     numpy.ndarray (n_samps1 x n_samps2)
         correlation values
     """
-    def __init__(self, ts_set1, ts_set2, lb=0.02, ub=0.15, TR=2, **kwargs):
-        if ts_set1 == ts_set2:
-            self.measure = 1
-        else:
-            self.measure = self._fit(ts_set1, ts_set2)
+    def __init__(self, ts_set1, ts_set2, **kwargs):
+        super(CorrelationMeasure, self).__init__(ts_set1, ts_set2, **kwargs)
 
-    @staticmethod
-    def _fit(ts_set1, ts_set2):
+    def __call__(self):
+        if self.ts1 == self.ts2:
+            return 1
+
         from scipy.stats import pearsonr
 
-        n1 = ts_set1.shape[0]
-        n2 = ts_set2.shape[0]
-        if (ts_set1.data.ndim > 1 or ts_set2.data.ndim > 1) and n1 == n2 > 1:
+        n1 = self.ts1.shape[0]
+        n2 = self.ts2.shape[0]
+        if (self.ts1.data.ndim > 1 or self.ts2.data.ndim > 1) and n1 == n2 > 1:
             mp = np.array(n1, n2)
             for i1 in list(range(n1)):
-                t1 = ts_set1[i1, :]
+                t1 = self.ts1[i1, :]
                 for i2 in list(range(n2)):
-                    t2 = ts_set2[i2, :]
+                    t2 = self.ts2[i2, :]
                     mp[i1, i2] = pearsonr(t1, t2)
 
             return mp
 
         else:
-            return pearsonr(ts_set1.data.flatten(), ts_set2.data.flatten())[0]
+            return pearsonr(self.ts1.data.flatten(), self.ts2.data.flatten())[0]
 
 
+
+class OrdinaryLeastSquares(object):
+    """Return a matrix with pearson correlation between pairs all time series in both sets.
+
+    Parameters
+    ----------
+    ts_set1: nitime.TimeSeries: n_samps x time_size
+        Time series
+
+    ts_set2: nitime.TimeSeries: n_samps x time_size
+        Time series
+
+    ols_param: str
+        Name of the parameter calculated from the OLS, e.g., 'rsquared', 'rsquared_adj'.
+        See statsmodels.api.OLS for valid choices.
+
+    Returns
+    -------
+    numpy.ndarray (n_samps1 x n_samps2)
+        correlation values
+    """
+    def __init__(self, ts_set1, ts_set2, **kwargs):
+        super(OrdinaryLeastSquares, self).__init__(ts_set1, ts_set2, **kwargs)
+        self.ols_param = kwargs.get('ols_param', 'rsquared_adj')
+
+    @staticmethod
+    def calc_ols_param(x, y, ols_param='rsquared_adj'):
+        import statsmodels.api as sm
+        x1  = sm.add_constant(x)
+        est = sm.OLS(y, x1)
+        est = est.fit()
+
+        return getattr(est, ols_param)
+
+    def __call__(self):
+        if self.ts1 == self.ts2:
+            return 1
+
+        return self.calc_ols_param(self.ts1, self.ts2, ols_param=self.ols_param)
 
 
 #class GrangerCausalityMeasure(object):
@@ -332,16 +372,18 @@ class SeedCorrelationMeasure(object):
     list
         List of correlation values
     """
-    def __init__(self, ts_set1, ts_set2, lb=0.02, ub=0.15, TR=2, **kwargs):
-        self.measure = self._fit(ts_set1, ts_set2)
+    def __init__(self, ts_set1, ts_set2, **kwargs):
+        super(SeedCorrelationMeasure, self).__init__(ts_set1, ts_set2, **kwargs)
 
-    @staticmethod
-    def _fit(ts_set1, ts_set2):
+    def __call__(self):
+        if self.ts1 == self.ts2:
+            return 1
+
         import nitime.analysis as nta
 
-        analyzer = nta.SeedCorrelationAnalyzer(ts_set1, ts_set2)
+        analyzer = nta.SeedCorrelationAnalyzer(self.ts1, self.ts2)
 
-        n_seeds = ts_set1.data.shape[0] if ts_set1.data.ndim > 1 else 1
+        n_seeds = self.ts1.data.shape[0] if self.ts1.data.ndim > 1 else 1
         if n_seeds == 1:
             cor = analyzer.corrcoef
         else:
@@ -363,23 +405,16 @@ class MeanSeedCorrelationMeasure(SeedCorrelationMeasure):
     ts_set2: nitime.TimeSeries: n_samps x time_size
         Time series
 
-    lb: float (optional)
-    ub: float (optional)
-        Lower and upper band of a pass-band into which the data will be
-        filtered. Default: lb=0, ub=None (max frequency).
-        Define a frequency band of interest.
-
-    kwargs:
-    'NFFT'
-
     Returns
     -------
     float
         Average correlation value
     """
-    def __init__(self, ts_set1, ts_set2, lb=0.02, ub=0.15, TR=2, **kwargs):
-        SeedCorrelationMeasure.__init__(self, ts_set1, ts_set2, lb=lb, ub=ub, TR=TR, **kwargs)
-        self.measure = np.mean(self.measure)
+    def __init__(self, ts_set1, ts_set2, **kwargs):
+        super(MeanSeedCorrelationMeasure, self).__init__(ts_set1, ts_set2, **kwargs)
+
+    def __call__(self):
+        return np.mean(super(MeanSeedCorrelationMeasure, self).__call__())
 
 
 class SeedCoherenceMeasure(object):
@@ -407,21 +442,25 @@ class SeedCoherenceMeasure(object):
     list
         List of coherence values.
     """
-    def __init__(self, ts_set1, ts_set2, lb=0.02, ub=0.15, TR=2, **kwargs):
-        self.measure = self._fit(ts_set1, ts_set2, lb, ub, **kwargs)
+    def __init__(self, ts_set1, ts_set2, **kwargs):
+        super(SeedCoherenceMeasure, self).__init__(ts_set1, ts_set2, **kwargs)
+        self.lb = kwargs.get('lb', 0.02)
+        self.ub = kwargs.get('ub', 0.15)
+        self.nfft = kwargs.get('NFFT', None)
 
-    @staticmethod
-    def _fit(ts_set1, ts_set2, lb, ub, **kwargs):
+    def __call__(self):
+        if self.ts1 == self.ts2:
+            return 1
+
         import nitime.analysis as nta
 
-        fft_par = kwargs.pop('NFFT', None)
-        if fft_par is not None:
-            analyzer = nta.SeedCoherenceAnalyzer(ts_set1, ts_set2, lb=lb, ub=ub,
-                                                 method={'NFFT': fft_par})
+        if self.nfft is not None:
+            analyzer = nta.SeedCoherenceAnalyzer(self.ts1, self.ts1, lb=self.lb, ub=self.ub,
+                                                 method={'NFFT': self.nfft})
         else:
-            analyzer = nta.SeedCoherenceAnalyzer(ts_set1, ts_set2, lb=lb, ub=ub)
+            analyzer = nta.SeedCoherenceAnalyzer(self.ts1, self.ts2, lb=self.lb, ub=self.ub)
 
-        n_seeds = ts_set1.data.shape[0] if ts_set1.data.ndim > 1 else 1
+        n_seeds = self.ts1.data.shape[0] if self.ts1.data.ndim > 1 else 1
         if n_seeds == 1:
             coh = np.mean(analyzer.coherence, -1)
         else:
@@ -434,41 +473,44 @@ class SeedCoherenceMeasure(object):
 
 
 class MeanSeedCoherenceMeasure(SeedCoherenceMeasure):
+    """Return the mean coherence value of all seed coherences the time series in ts_set1 and ts_set2.
 
-    def __init__(self, ts_set1, ts_set2, lb=0.02, ub=0.15, TR=2, **kwargs):
-        """Return the mean coherence value of all seed coherences the time series in ts_set1 and ts_set2.
+    Parameters
+    ----------
+    ts_set1: nitime.TimeSeries
+        Time series matrix: n_samps x time_size
 
-        Parameters
-        ----------
-        ts_set1: nitime.TimeSeries
-            Time series matrix: n_samps x time_size
+    ts_set2: nitime.TimeSeries
+        Time series matrix: n_samps x time_size
 
-        ts_set2: nitime.TimeSeries
-            Time series matrix: n_samps x time_size
+    lb: float (optional)
+    ub: float (optional)
+        Lower and upper band of a pass-band into which the data will be
+        filtered. Default: lb=0, ub=None (max frequency).
+        Define a frequency band of interest.
 
-        lb: float (optional)
-        ub: float (optional)
-            Lower and upper band of a pass-band into which the data will be
-            filtered. Default: lb=0, ub=None (max frequency).
-            Define a frequency band of interest.
+    kwargs:
+    'NFFT'
 
-        kwargs:
-        'NFFT'
+    Returns
+    -------
+    float
+        Average coherence value
+    """
+    def __init__(self, ts_set1, ts_set2, **kwargs):
+        super(MeanSeedCoherenceMeasure, self).__init__(ts_set1, ts_set2, **kwargs)
 
-        Returns
-        -------
-        float
-            Average coherence value
-        """
-        SeedCoherenceMeasure.__init__(self, ts_set1, ts_set2, lb=lb, ub=ub, TR=TR, **kwargs)
-        self.measure = np.mean(self.measure)
+    def __call__(self):
+        return np.mean(super(MeanSeedCoherenceMeasure, self).__call__())
 
 
 class MeanCoherenceMeasure(NiCoherenceMeasure):
 
-    def __init__(self, ts_set1, ts_set2, lb=0.02, ub=0.15, TR=2, **kwargs):
-        NiCoherenceMeasure.__init__(self, ts_set1, ts_set2, lb=lb, ub=ub, TR=TR, **kwargs)
-        self.measure = np.mean(self.measure)
+    def __init__(self, ts_set1, ts_set2, **kwargs):
+        super(MeanCoherenceMeasure, self).__init__(ts_set1, ts_set2, **kwargs)
+
+    def __call__(self):
+        return np.mean(super(MeanCoherenceMeasure, self).__call__())
 
 
 class SimilarityMeasureFactory(object):
@@ -501,6 +543,7 @@ class SimilarityMeasureFactory(object):
                                 ('coherence',            NiCoherenceMeasure),
                                 ('grangercausality',     NiGrangerCausalityMeasure),
                                 ('nicorrelation',        NiCorrelationMeasure),
+                                ('ordinaryleastsq',      OrdinaryLeastSquares),
                                 ('seedcorrelation',      SeedCorrelationMeasure),
                                 ('seedcoherence',        SeedCoherenceMeasure),
                                 ('mean_coherence',       MeanCoherenceMeasure),
