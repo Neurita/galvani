@@ -1,21 +1,21 @@
 # // ====================================================================
-# // This file is part of the Endmember Induction Algorithms Toolbox for MATLAB 
-# // Copyright (C) Grupo de Inteligencia Computacional, Universidad del 
-# // Pais Vasco (UPV/EHU), Spain, released under the terms of the GNU 
+# // This file is part of the Endmember Induction Algorithms Toolbox for MATLAB
+# // Copyright (C) Grupo de Inteligencia Computacional, Universidad del
+# // Pais Vasco (UPV/EHU), Spain, released under the terms of the GNU
 # // General Public License.
 # //
-# // Endmember Induction Algorithms Toolbox is free software: you can redistribute 
-# // it and/or modify it under the terms of the GNU General Public License 
-# // as published by the Free Software Foundation, either version 3 of the 
+# // Endmember Induction Algorithms Toolbox is free software: you can redistribute
+# // it and/or modify it under the terms of the GNU General Public License
+# // as published by the Free Software Foundation, either version 3 of the
 # // License, or (at your option) any later version.
 # //
 # // Endmember Induction Algorithms Toolbox is distributed in the hope that it will
 # // be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
-# // of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU 
+# // of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
 # // General Public License for more details.
 # //
 # // You should have received a copy of the GNU General Public License
-# // along with Endmember Induction Algorithms Toolbox. 
+# // along with Endmember Induction Algorithms Toolbox.
 # // If not, see <http://www.gnu.org/licenses/>.
 # // ====================================================================
 #
@@ -26,7 +26,7 @@
 # Grupo de Inteligencia Computacional (GIC), Universidad del Pais Vasco /
 # Euskal Herriko Unibertsitatea (UPV/EHU)
 # http://www.ehu.es/computationalintelligence
-# 
+#
 # Copyright (2013) Grupo de Inteligencia Computacional @ Universidad del Pais Vasco, Spain.
 #
 # Python translation made by Alexandre Savio.
@@ -131,7 +131,7 @@ class LAM(object):
     -----
     Bibliographical references:
     [1] M. Grana, D. Chyzhyk, M. Garcia-Sebastian, y C. Hernandez, \
-    "Lattice independent component analysis for functional magnetic resonance imaging", 
+    "Lattice independent component analysis for functional magnetic resonance imaging",
     Information Sciences, vol. 181, n. 10, pags. 1910-1928, May. 2011.
     """
 
@@ -234,9 +234,7 @@ class ILSIA(object):
     "Lattice independent component analysis for functional magnetic resonance imaging", \
     Information Sciences, vol. 181, n. 10, pags. 1910-1928, May. 2011.
     """
-
     def __init__(self, data, alpha=0):
-
         self._data  = np.array(data)
         self._alpha = alpha
         self._is_standardized = False
@@ -430,8 +428,8 @@ class EIHA(object):
     Notes
     -----
     Bibliographical references:
-    [1] M. Grana, I. Villaverde, J. O. Maldonado, y C. Hernandez, 
-    "Two lattice computing approaches for the unsupervised segmentation of hyperspectral images", 
+    [1] M. Grana, I. Villaverde, J. O. Maldonado, y C. Hernandez,
+    "Two lattice computing approaches for the unsupervised segmentation of hyperspectral images",
     Neurocomputing, vol. 72, n. 10-12, pags. 2111-2120, 2009.
     """
 
@@ -483,7 +481,7 @@ class EIHA(object):
                 erosive_indep  = np.ones(p)
                 dilative_indep = np.ones(p)
 
-                #Check if samp is in the same quadrant than any of the 
+                #Check if samp is in the same quadrant than any of the
                 #already selected endmembers
                 for e in range(p):
                     if signs[e] == np.sign(samp - mu_data):
@@ -541,8 +539,8 @@ class WM(object):
     Notes
     -----
     Bibliographical references:
-    [1] G. X. Ritter y G. Urcid, 
-    "A lattice matrix method for hyperspectral image unmixing", 
+    [1] G. X. Ritter y G. Urcid,
+    "A lattice matrix method for hyperspectral image unmixing",
     Information Sciences, vol. In Press, Corrected Proof, Oct. 2010.
     """
 
@@ -647,7 +645,7 @@ class HFC(object):
                 # stats.norm.ppf not valid with sigma
                 # using the module of the complex number : abs(sigma)
                 tau = -stats.norm.ppf(pf, 0, abs(sigma))
-                if (lcorr[j]-lcov[j]) > tau: 
+                if (lcorr[j]-lcov[j]) > tau:
                     n_ems += 1
 
             ems.append(n_ems)
@@ -685,7 +683,7 @@ class NFINDR(object):
     em        : set of induced endmembers [p x nvariables]
 
     cnt       : induced endmembers indexes vector [nsamples] with {0,1}
-                         values, where '1' indicates that the corresponding sample 
+                         values, where '1' indicates that the corresponding sample
                          has been identified as an endmember.
 
     idxs      : array of indices into the array data corresponding to the
@@ -694,7 +692,7 @@ class NFINDR(object):
     Notes
     -----
     Bibliographical references:
-    [1] Winter, M. E., "N-FINDR: an algorithm for fast autonomous spectral end-member determination in hyperspectral data", 
+    [1] Winter, M. E., "N-FINDR: an algorithm for fast autonomous spectral end-member determination in hyperspectral data",
     presented at the Imaging Spectrometry V, Denver, CO, USA, 1999, vol. 3753, pags. 266-275.
     """
 
@@ -883,8 +881,8 @@ class ATGP(object):
     Notes
     -----
      Bibliographical references:
-     [1] A. Plaza y C.-I. Chang, 
-    "Impact of Initialization on Design of Endmember Extraction Algorithms", 
+     [1] A. Plaza y C.-I. Chang,
+    "Impact of Initialization on Design of Endmember Extraction Algorithms",
     Geoscience and Remote Sensing, IEEE Transactions on, vol. 44, n. 11, p. 3397-3407, 2006.
     """
 
