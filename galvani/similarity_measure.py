@@ -99,7 +99,8 @@ def percent_change(ts, ax=-1):
 
 
 class TimeSeriesGroupMeasure(object):
-    """A strategy class to use any of the time series group measures methods given as a callable objet.
+    """A strategy class to use any of the time series group measures methods given as a
+    callable object in the `algorithm` parameter.
 
     Parameters
     ----------
@@ -137,7 +138,7 @@ class TimeSeriesGroupMeasure(object):
         return self.measure()
 
 
-class Measure(object):
+class NvsNMeasure(object):
     """ A generic `n` vs `n` vectors similarity measure. Callable class"""
 
     def __init__(self, ts_set1, ts_set2, **kwargs):
@@ -148,7 +149,7 @@ class Measure(object):
         raise NotImplementedError
 
 
-class NiCorrelationMeasure(Measure):
+class NiCorrelationMeasure(NvsNMeasure):
     """Return a the Pearson's Correlation value between all time series in both sets.
     Calculates the correlation using nitime.
 
@@ -179,7 +180,7 @@ class NiCorrelationMeasure(Measure):
         return corr.corrcoef[0, 1]
 
 
-class NiCoherenceMeasure(object):
+class CoherenceMeasure(NvsNMeasure):
     """Return a the Spectral Coherence value between all time series in both sets.
 
     Parameters
@@ -202,7 +203,7 @@ class NiCoherenceMeasure(object):
         Scalar coherence value
     """
     def __init__(self, ts_set1, ts_set2, **kwargs):
-        super(NiCoherenceMeasure, self).__init__(ts_set1, ts_set2, **kwargs)
+        super(CoherenceMeasure, self).__init__(ts_set1, ts_set2, **kwargs)
         self.lb = kwargs.get('lb', 0.02)
         self.ub = kwargs.get('ub', 0.15)
 
@@ -219,7 +220,7 @@ class NiCoherenceMeasure(object):
         return np.mean(mean_coh) #average all of it
 
 
-class NiGrangerCausalityMeasure(object):
+class NiGrangerCausalityMeasure(NvsNMeasure):
     """Returns a the Granger Causality value all time series in both sets.
 
     Parameters
@@ -265,7 +266,7 @@ class NiGrangerCausalityMeasure(object):
         return np.nanmean(mean_gc)
 
 
-class CorrelationMeasure(object):
+class CorrelationMeasure(NvsNMeasure):
     """Return a matrix with pearson correlation between pairs all time series in both sets.
 
     Parameters
@@ -306,8 +307,7 @@ class CorrelationMeasure(object):
             return pearsonr(self.ts1.data.flatten(), self.ts2.data.flatten())[0]
 
 
-
-class OrdinaryLeastSquares(object):
+class OrdinaryLeastSquares(NvsNMeasure):
     """Return a matrix with pearson correlation between pairs all time series in both sets.
 
     Parameters
@@ -354,7 +354,7 @@ class OrdinaryLeastSquares(object):
 # ----------------------------------------------------------------------------
 # Many Vs Many Time Series Measures
 # ----------------------------------------------------------------------------
-class SeedCorrelationMeasure(object):
+class SeedCorrelationMeasure(NvsNMeasure):
     """Return a list of correlation values between the time series in ts_set1 and ts_set2.
 
     Parameters
@@ -417,7 +417,7 @@ class MeanSeedCorrelationMeasure(SeedCorrelationMeasure):
         return np.mean(super(MeanSeedCorrelationMeasure, self).__call__())
 
 
-class SeedCoherenceMeasure(object):
+class SeedCoherenceMeasure(NvsNMeasure):
     """Return a list of coherence values between the time series in ts_set1 and ts_set2.
 
     Parameters
@@ -540,7 +540,7 @@ class SimilarityMeasureFactory(object):
         See: http://nipy.org/nitime/examples/seed_analysis.html for more information
         """
         methods = OrderedDict([ ('correlation',          CorrelationMeasure),
-                                ('coherence',            NiCoherenceMeasure),
+                                ('coherence',            CoherenceMeasure),
                                 ('grangercausality',     NiGrangerCausalityMeasure),
                                 ('nicorrelation',        NiCorrelationMeasure),
                                 ('ordinaryleastsq',      OrdinaryLeastSquares),
